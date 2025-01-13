@@ -1,0 +1,81 @@
+
+---
+title: "Qualitative metabolomics"
+author: "david oluwasusi"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r}
+install.packages("BiocManager")
+BiocManager::install("mixOmics")
+```
+
+Multivariate classification using PLS-DA and enose data
+
+```{r}
+fungi = read.table("data2.csv", sep=",", header=TRUE, row.names=1)
+fungiMatrix = as.matrix(fungi)
+
+samples = row.names(fungiMatrix)
+sensors = colnames(fungiMatrix)
+
+class1 = fungiMatrix[,1]
+class1 = as.vector(class1)
+
+RESP = fungiMatrix[,2:ncol(fungiMatrix)]
+RESP = as.matrix(RESP)
+
+
+```
+
+Exploratory data analsyis with PCA
+
+```{r}
+require(mixOmics)
+
+pca.enose <- pca(RESP, ncomp = 6, scale = TRUE)
+plotIndiv(pca.enose, ind.names = Samples, group = class1, style = "lattice")
+plotIndiv(pca.enose, ind.names = Samples, group = class1, style = "3d")
+```
+
+generate Biplot
+
+```{r}
+Var1<-100*(pca.enose$prop_expl_var$X[1])
+Var1<-round(Var1, digits=2)
+Var2<-100*(pca.enose$prop_expl_var$X[2])
+Var2<-round(Var2, digits=2)
+biplot(pca.enose, 
+       xlab=paste("PC1 ", Var1, "%"), 
+       ylab=paste("PC2 ", Var2, "%"), 
+       group = class1, 
+       col.per.group = c("red", "blue", "orange","green", "gray")
+       )
+
+```
+
+2.2 Multivariate classification with PLS-DA
+```{r}
+#CREATE training set
+train1 <- RESP[1:20, ]
+train1 <- as.matrix(train1)
+
+
+class<-as.factor(class1[c(-25:-21)])
+
+test1 <- RESP[21:25, ]
+testCl <-as.factor(class1[21:25])
+```
+
+Build plsda model
+```{r}
+plsda.train1 <- plsda(train1, class, ncomp = 10)
+```
+
+visualize plsda
+```{r}
+plotIndiv(plsda.train1, ind.names = TRUE, comp = c(1, 2), ellipse = TRUE, style="lattice", cex=c(rep(1, 5)))
+```
+
+
