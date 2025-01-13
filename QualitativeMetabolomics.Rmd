@@ -77,5 +77,68 @@ visualize plsda
 ```{r}
 plotIndiv(plsda.train1, ind.names = TRUE, comp = c(1, 2), ellipse = TRUE, style="lattice", cex=c(rep(1, 5)))
 ```
+```{r}
+library(dplyr)
+# Apply VIP(variable importance for the projection) statistics
+
+# Calculate VIP (ensure the output is usable)
+train.vip <- vip(plsda.train1)
+train.vip<-as.matrix(train.vip)
+
+#Visualise VIPs
+barplot(train.vip[,1], beside=TRUE, 
+        col = topo.colors(n=24), ylim=c(0, 1.7), xlim=c(0,38))
+#correlation plot for variables
+plotVar(plsda.train1, cutoff = 0.7)
+```
+Cross Validation
+
+```{r}
+set.seed(2543)
+
+perf.plsda <- perf(plsda.train1, validation = "Mfold", folds=4, progressBar= FALSE, nrepeat = 10)
+
+#visualize
+plot(perf.plsda, col = color.mixo(1:3), sd = TRUE, legend.position = "horizontal")
+```
+
+Model Tuning,
+
+```{r}
+list.keepX <- seq(4, 24, 2)
+
+tune.plsda.train1 <- tune.splsda(train1, class, ncomp = 4, validation = "Mfold", folds =4, dist = "max.dist",
+                                progressBar = FALSE, measure = "BER", test.keepX = list.keepX, nrepeat = 10)
+
+
+```
+
+```{r}
+error <- tune.plsda.train1$error.rate
+ncomp <- tune.plsda.train1$choice.ncomp$ncomp # optimal number of components based on t-tests on the error rate
+ncomp
+
+select.keepX <- tune.plsda.train1$choice.keepX[1:ncomp]  # optimal number of variables to select
+select.keepX
+
+plot(tune.plsda.train1, col = color.jet(4))
+```
+```{r}
+#Create new optimised model
+splsda.train1.opt <- splsda(train1, class, ncomp = ncomp, keepX = select.keepX)
+
+plotIndiv(splsda.train1.opt, ind.names = FALSE, legend=TRUE,
+          ellipse = TRUE, title="sPLS-DA - final result")
+```
+```{r}
+test.predict1 <- predict(splsda.train1.opt, test1, dist="max.dist")
+
+prediction <- test.predict1$class$max.dist[, 2]
+
+table(factor(prediction, levels = levels(class1)), testCl)
+
+confusion.mat = get.confusion_matrix(truth = class1[21:25], predicted = prediction)
+confusion.mat
+```
 
 
