@@ -1,0 +1,115 @@
+---
+title: "Machine Learning Metabolomics"
+author: "david oluwasusi"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+Classification of sensory data
+
+Library Loading
+```{r}
+require(mixOmics)
+require(class)
+require(gmodels)
+require(caret)
+require(rpart)
+require("rpart.plot")
+```
+
+
+Data loading
+
+```{r}
+enose <- read.table('EnoseAllSamples.csv', sep=",", header = TRUE, row.names = 1)
+sensory <- read.table('SensoryAllSamples.csv', sep=",", header = TRUE, row.names = 1)
+```
+
+```{r}
+merged <- merge(enose, sensory, by="row.names")
+
+rownames(merged) = merged[,1]
+
+#remove rownames columns
+AllData <- as.data.frame(merged[, -1])
+```
+
+Data Exploration
+
+```{r}
+
+pca.enose <- pca(AllData, ncomp = 6, scale = TRUE)
+plot(pca.enose)
+```
+```{r}
+mergedVector <- as.factor(merged[, 1])
+plotIndiv(pca.enose, ind.names = merged$sensory, group = mergedVector, style = "lattice")
+```
+Data preparation
+```{r}
+AllData$sensory <- factor(AllData$sensory, levels=c("1", "2", "3"))
+
+round(prop.table(table(AllData$sensory)) * 100, digits = 1)
+```
+
+
+create data partition
+```{r}
+set.seed(8)
+
+trainIndex <- createDataPartition(AllData$sensory, p = .7, list = FALSE, times = 1)
+
+trainSet <- AllData[trainIndex, ]; testSet <- AllData[-trainIndex, ]
+
+trainCl <- trainSet[, ncol(trainSet)]
+testCl <- testSet[, ncol(testSet)]
+```
+
+
+K Nearest Neighbours
+
+```{r}
+trainSet.knn <- trainSet[, -ncol(trainSet)]
+testSet.knn <- testSet[, -ncol(testSet)]
+model.k3 <- knn(trainSet.knn, testSet.knn, trainCl, k=3)
+```
+
+Prediction accuracy
+```{r}
+library(gmodels)
+cross.table <- CrossTable(testCl, model.k3, prop.chisq=FALSE, prop.t=FALSE, prop.c=FALSE, prop.r=FALSE)
+```
+```{r}
+confusion.matrix <- confusionMatrix(model.k3, testCl, positive = "3")
+confusion.matrix$overall
+```
+
+```{r}
+k.results <- function(n, trs, tstS, trCl, tstCl){
+  accuracies<-c()
+# Fill in the loop with the missing arguments
+  for (i in 1:n){
+    trainSet <- trs
+    testSet <- tstS
+    testClass <- tstCl
+    model <- knn(trs, tstS, trCl, k=3)
+  
+    kernel.confusion.matrix <- confusionMatrix(model,testClass, positive="3")
+    current.accuracy <- kernel.confusion.matrix$overall[1]
+    kernel.confusion.matrix$overall[1]
+    accuracies <- c(accuracies, current.accuracy)
+  }
+  
+  plot(1:n, accuracies, type="b", xlab="model accuracy", main="KNN classifier prediction accuracy")
+}
+
+```
+
+```{r}
+  preProcValues <- preProcess(trainSet.knn, method = c("center", "scale"))
+    trainTransformed <- predict(preProcValues, trainSet.knn)
+     testTransformed <- predict(preProcValues, testSet.knn)
+k.results(20, trainTransformed, testTransformed, trainCl, testCl)
+```
+Descision Trees
+
