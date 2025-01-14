@@ -113,3 +113,26 @@ k.results(20, trainTransformed, testTransformed, trainCl, testCl)
 ```
 Descision Trees
 
+```{r}
+model.tree <- rpart(sensory ~ ., data=trainSet)
+rpart.plot(x=model.tree, box.palette = "BuBn", type = 5)
+```
+
+```{r}
+predicted <- predict(model.tree, testSet, type="class")
+
+tree.confusion.matrix = confusionMatrix(predicted, testCl)
+tree.confusion.matrix
+```
+
+Model Improvement
+```{r}
+pruned_tree <- prune(model.tree, cp = 0.04)
+
+accuracy.cp <- function(model.tr, tstS, tstCl){
+  
+}
+```
+
+
+SUPPORT VECTOR MACHINES (SVM)
