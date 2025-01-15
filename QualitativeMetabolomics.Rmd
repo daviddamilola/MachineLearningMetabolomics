@@ -141,4 +141,178 @@ confusion.mat = get.confusion_matrix(truth = class1[21:25], predicted = predicti
 confusion.mat
 ```
 
+Multivariate classification using PLS-DA and GC-MS data
+
+```{r}
+rm(list=ls())
+# Close any open graphics devices
+graphics.off()
+require(matlab, quietly=TRUE)
+#require(plsgenomics)
+require(R.matlab)
+require(mixOmics)
+require(rgl)
+require(ptw)
+require(dplyr)
+source("pretreat.r")
+
+
+FILE = "./NA_BWGT_FAE_CTRL_CD.mat"
+DATA = readMat(FILE)
+
+
+```
+
+
+explore DATA
+
+```{r}
+XTIC = DATA$XTIC
+
+colnames(XTIC)<-sprintf("X%s",seq(1:ncol(XTIC)))
+CLASS = as.vector(DATA$CLASS)
+SAM = as.character(unlist(DATA$SAM))
+RT = DATA$RTscan
+```
+
+VISUALIZE
+
+```{r}
+##PCA OF RAW DATA
+
+pca.raw <- pca(XTIC, ncomp = 4, scale = TRUE)
+#plot(pca.raw)
+
+# samples representation
+
+plotIndiv(pca.raw, ind.names = SAM, 
+          group = as.factor(CLASS), style = "lattice", legend = TRUE)
+```
+```{r}
+#Compare raw chromatograms for alignment
+
+matplot(XTIC[1,],type="l",main="Chromatograms", xlab="RT", ylab="TIC" )
+matplot(XTIC[22,],type="l",col=2,add=TRUE)
+leg.txt = c(paste("chromatogram", SAM[9]), paste("\n chromatogram", SAM[1]))
+legend("topleft", leg.txt, pch="_", col=c(1,2), bty="n")
+
+
+
+matplot(XTIC[20,],type="l",main="Chromatograms", xlab="RT", ylab="TIC" )
+matplot(XTIC[1,],type="l",col=2,add=TRUE)
+leg.txt = c(paste("chromatogram", SAM[6]), paste("\n chromatogram", SAM[1]))
+legend("topleft", leg.txt, pch="_", col=c(1,2), bty="n")
+```
+```{r}
+### PTW
+ref <- XTIC[1,]
+samp <- XTIC[2:24,]
+gaschrom.ptw <-ptw(ref, samp, warp.type = "individual", verbose = TRUE, 
+                   optim.crit = "WCC",  trwdth = 100, init.coef = c(0, 1, 0))
+summary(gaschrom.ptw)
+
+##PCA OF PTW DATA
+XTIC.ptw <- as.matrix(gaschrom.ptw[["warped.sample"]])
+XTIC.ptw <- rbind(XTIC[1,], XTIC.ptw)
+```
+```{r}
+library(dplyr)
+XTIC.ptw <- XTIC.ptw %>% replace(is.na(.), 0)
+pca.ptw <- pca(XTIC.ptw, ncomp = 4, scale = TRUE)
+#plot(pca.raw)
+
+# samples representation
+plotIndiv(pca.ptw, ind.names = SAM, 
+          group = as.numeric(as.factor(CLASS)), style = "lattice", legend = TRUE)
+
+
+```
+```{r}
+matplot(XTIC.ptw[1,],type="l",main="Chromatograms", xlab="RT", ylab="TIC" )
+matplot(XTIC.ptw[22,],type="l",col=2,add=TRUE)
+leg.txt = c(paste("chromatogram", SAM[9]), paste("\n chromatogram", SAM[1]))
+legend("topleft", leg.txt, pch="_", col=c(1,2), bty="n")
+
+XTIC.ptw.out <- XTIC.ptw[-c(7, 24),]
+
+pca.ptw.out <- pca(XTIC.ptw.out, ncomp = 4, scale = TRUE)
+#plot(pca.raw)
+
+# samples representation
+CLASS1<-as.factor(CLASS[-c(7,24)])
+SAM1 <- SAM[-c(7, 24)]
+
+plotIndiv(pca.ptw.out, ind.names = SAM1, 
+          group = as.factor(CLASS1), style = "lattice", legend = TRUE)
+```
+
+
+
+```{r}
+##Repeat plsda with aligned chromatograms
+
+# Split into training and test set
+cat("\nExtracting test set...\n")
+XTrain.ptw = XTIC.ptw.out[-c(3,9,16,19),]
+Ctrain.ptw = CLASS1[-c(3,9,16,19)]
+SAMtrain.ptw = SAM1[-c(3,9,16,19)]
+
+XTest.ptw = XTIC.ptw.out[c(3,9,16,19),]
+Ctest.ptw = CLASS1[c(3,9,16,19)]
+SAMtest.ptw = SAM1[c(3,9,16,19)]
+
+# Now perform plsda with mixOmics
+
+plsda.GC_ptw_train <- plsda(XTrain.ptw, Ctrain.ptw, ncomp = 10)
+
+plotIndiv(plsda.GC_ptw_train, ind.names = TRUE, ellipse = TRUE, legend = TRUE)
+
+#correlation plot for variables
+plotVar(plsda.GC_ptw_train, cutoff = 0.7, var.names=FALSE)
+
+#Performance of plsda model
+set.seed(2543) # for reproducibility 
+perf.plsda.ptw <- perf(plsda.GC_ptw_train, validation = "Mfold", 
+                    folds=4, progressBar = FALSE, nrepeat=10) 
+
+
+plot(perf.plsda.ptw, col = color.mixo(1:3), sd = TRUE, legend.position = "horizontal")
+
+
+##Set list of variables to be tested on each component
+list.keepX <- c(5:10,  seq(20, 100, 10))
+list.keepX # to output the grid of values tested
+
+tune.plsda.GC_ptw_train<-tune.splsda(XTrain.ptw, Ctrain.ptw, ncomp = 4,
+                                     validation = "Mfold",
+                                     folds = 4, dist = 'max.dist', progressBar = FALSE,
+                                     measure = "BER", test.keepX = list.keepX,
+                                     nrepeat = 10)
+
+##Extract the errors
+error <- tune.plsda.GC_ptw_train$error.rate
+ncomp <- tune.plsda.GC_ptw_train$choice.ncomp$ncomp # optimal number of components based on t-tests on the error rate
+ncomp
+
+select.keepX <- tune.plsda.GC_ptw_train$choice.keepX[1:2]  # optimal number of variables to select
+select.keepX
+
+plot(tune.plsda.GC_ptw_train, col = color.jet(4))
+
+#Create new optimised model
+splsda.train.opt1 <- splsda(XTrain.ptw, Ctrain.ptw, ncomp = 2, keepX = select.keepX)
+
+plotIndiv(splsda.train.opt1, ind.names = FALSE, legend=TRUE,
+          ellipse = TRUE, title="sPLS-DA - final result")
+
+
+
+# Finally predict
+test.predict.ptw <- predict(plsda.GC_ptw_train, newdata=XTest.ptw, dist="max.dist")
+
+# evaluate the prediction accuracy for the first two components
+predict.comp2 <- test.predict.ptw$class$max.dist[,2]
+#Extract confusion matrix
+table(factor(predict.comp2, levels = levels(CLASS1)), Ctest.ptw)
+```
 
