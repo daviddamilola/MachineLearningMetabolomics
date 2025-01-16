@@ -1,0 +1,241 @@
+---
+title: "Practical-  Introduction To Image Analysis"
+author: "David Oluwasusi"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 3
+    toc_float: true
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+
+BiocManager::install("EBImage")
+```
+```{r}
+
+library(EBImage)
+f = system.file("images", "sample.png", package="EBImage")
+
+img <- readImage(f)
+
+```
+
+visualize image
+```{r}
+display(img, method = "browser")
+```
+Nucl ei image
+
+```{r}
+nuc = readImage(system.file("images", "nuclei.tif", package="EBImage"))
+```
+
+display the image
+```{r}
+display(nuc, method = "raster")
+```
+
+```{r}
+imgcol = readImage(system.file("images", "sample-color.png", package="EBImage"))
+
+display(imgcol, method = "raster")
+```
+
+```{r}
+print(img, short=TRUE)
+```
+```{r}
+imageData(img)[1:3, 1:6]
+hist(img)
+```
+
+```{r}
+imageData(imgcol)[1:5,1:6,1]
+hist(imgcol)
+imgcol
+```
+```{r}
+strawb <- readImage("strawb1.jpg")
+```
+
+display image
+```{r}
+display(strawb, method = "raster")
+```
+
+```{r}
+strawb.gray <-channel(strawb, mode="gray")
+strawb_bright = strawb.gray + 0.4
+display( strawb_bright )
+```
+
+```{r}
+strawb_bright[strawb_bright > 1] <- 1 # Replace values more than 1 with 1
+
+strawb_bright[strawb_bright < 0] <- 0 # Replace values less than 0 with 0
+```
+```{r}
+display(strawb_bright, method = "raster")
+```
+```{r}
+strawb.inv <- normalize(-strawb.gray)
+display(strawb.inv, method="raster")
+```
+```{r}
+strawb_neg = max(strawb.gray) - strawb.gray
+display( strawb_neg )
+```
+
+contrast adjustments
+```{r}
+strawb_contr = strawb.gray * 2
+display( strawb_contr)
+```
+Gamma correction
+- done through exponentiation
+
+```{r}
+strawb_exp = strawb.gray ^ 0.5
+display(strawb_exp)
+```
+
+```{r}
+strawb_comb = combine(
+  strawb.gray, # original gray image
+  strawb.gray + 0.4, # brighter image
+  strawb.gray * 2, # increased contrast
+  strawb.gray ^ 0.5 # gamma correction
+)
+```
+
+```{r}
+display(strawb_comb, all=TRUE)
+```
+
+save image
+```{r}
+writeImage(strawb.gray, "strawb1_gray.jpeg", quality = 85)
+```
+
+Linear Gaussian Filtering
+```{r}
+w = makeBrush(size = 51, shape = "gaussian", sigma = 7)
+strawb.smooth = filter2(getFrame(strawb.gray, 1), w)
+
+display(strawb.smooth, all=TRUE )
+```
+
+```{r}
+nuc_gblur = gblur(nuc, sigma = 5)
+display(nuc_gblur, all=TRUE )
+```
+
+```{r}
+lap.filt = matrix(1, nrow = 3, ncol = 3)
+lap.filt[2, 2] = -8
+strawb_filt = filter2(strawb_comb, lap.filt)
+display(strawb_filt, all=TRUE)
+```
+
+Image Thresholding
+```{r}
+strawb_thresh = strawb.gray > 0.5
+display(strawb_thresh)
+```
+
+```{r}
+disc = makeBrush(31, "disc")
+disc = disc / sum(disc)
+offset = 0.05
+nuc_bg = filter2(nuc, disc)
+nuc_th = nuc > nuc_bg + offset
+display(nuc_th, all=TRUE)
+```
+
+```{r}
+display(thresh(nuc, w=15, h=15, offset=0.05), all=TRUE)
+```
+
+```{r}
+
+
+# Global thresholding
+global.thresh <- nuc > otsu(nuc)
+
+# Adaptive thresholding (block size = 15, offset = 0.03)
+adaptive.thresh <- thresh(nuc, w = 15, h = 15, offset = 0.03)
+
+# Display the results
+display(global.thresh, title = "Global Thresholding")
+display(adaptive.thresh, title = "Adaptive Thresholding")
+```
+```{r}
+global.strawb <- strawb.gray > otsu(strawb.gray)
+
+# Adaptive thresholding
+adaptive.strawb <- thresh(strawb.gray, w = 15, h = 15, offset = 0.03)
+
+# Display the results
+display(global.strawb, title = "Global Thresholding - Strawb.gray")
+display(adaptive.strawb, title = "Adaptive Thresholding - Strawb.gray")
+```
+Image Segmentation
+```{r}
+nmask = watershed(distmap(nuc_th), 2)
+display(colorLabels(nmask), all=TRUE)
+```
+
+Detect bad apple
+
+```{r}
+library(EBImage)
+
+# Read and display the image
+apple <- readImage("apple.jpg")
+display(apple, title = "Original Apple Image")
+```
+```{r}
+# Convert to grayscale
+apple_gray <- channel(apple, "gray")
+display(apple_gray, title = "Grayscale Apple Image")
+
+```
+```{r}
+apple_enhanced <- normalize(apple_gray)
+display(apple_enhanced, title = "Enhanced Contrast Apple Image")
+```
+
+```{r}
+global_thresh <- apple_enhanced > otsu(apple_enhanced)
+display(global_thresh, title = "Global Thresholding")
+
+# Apply adaptive thresholding
+adaptive_thresh <- thresh(apple_enhanced, w = 15, h = 15, offset = 0.02)
+display(adaptive_thresh, title = "Adaptive Thresholding")
+```
+
+Morphologgical segmentation
+```{r}
+apple_morph <- opening(adaptive_thresh, makeBrush(5, shape = "disc"))
+display(apple_morph, title = "After Morphological Operations")
+```
+
+labelling and analyzing the regions
+```{r}
+apple_labels <- bwlabel(apple_morph)
+
+# Compute region properties
+apple_features <- computeFeatures.shape(apple_labels)
+print(apple_features)
+
+# Overlay labeled regions on the original image
+apple_overlay <- paintObjects(apple_labels, apple, col = "red")
+display(apple_overlay, title = "Labeled Affected Areas")
+```
+
