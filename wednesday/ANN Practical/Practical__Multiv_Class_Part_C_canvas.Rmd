@@ -127,9 +127,11 @@ mnist_test_y <-to_categorical(mnist_test_y, 10)
 
 ### Task 4: Change the column names for the `mnist_y` matrix to be between 0-9. Print the first few rows in the console to see if it has worked. 
 ```{r}
-colnames(mnist_y)<-
+colnames(mnist_y)<-0:9
 
-colnames(mnist_test_y)<-
+colnames(mnist_test_y)<-0:9
+
+head(mnist_y)
 ```
 
 ## Network Architecture
@@ -153,16 +155,16 @@ In this example we will create three hidden layers the first with 256 nodes, the
 ```{r}
 model <- keras_model_sequential() %>%
   layer_dense(units = 256, activation = "relu", input_shape = c(784)) %>%
-  layer_dense() %>%
-  layer_dense() %>%
-  layer_dense()
+  layer_dense(units = 128, activation = 'relu') %>%
+  layer_dense(units = 64, activation = 'relu') %>%
+  layer_dense(units = 10, activation = 'softmax')
 
 ```
 
 Now print the model architecture using the function `summary()`.
 
 ```{r}
-
+summary(model)
 ```
 
 ### Backpropagation
@@ -181,9 +183,9 @@ Backpropagation is incorporated within the DNN with the function `compile()`.
 ### Task 6: In the following chunk select `categorical_crossentropy` for the loss function, `optimizer_rmsprop()` for the optimizer and `accuracy` metrics.   
 ```{r}
 model %>% compile(
-  loss = ,
-  optimizer = ,
-  metrics = c() 
+  loss = "categorical_crossentropy",
+  optimizer = optimizer_rmsprop(),
+  metrics = c("accuracy") 
 )
 ```
 
@@ -202,22 +204,23 @@ Previously we created a base model. In the next step we will train it with the m
 # Train the model
 fit1 <- model %>%
   fit(
-    x = ,
-    y = ,
-    epochs = ,     # Select a value between 20-50
-    batch_size = ,
-    validation_split = ,    # Select a value between 0.2 to 0.5
+    x = mnist_x,
+    y = mnist_y,
+    epochs = 25,     # Select a value between 20-50
+    batch_size = 64,
+    validation_split = 0.2,    # Select a value between 0.2 to 0.5
     verbose = FALSE
   )
 ```
 
 ```{r}
 # Display fit1 output
-
+plot(fit1)
 ```
 
 Plot the loss and accuracy results. Use the `plot()` function to see the loss and accuracy changes through successive epochs. 
 ```{r}
+model %>% evaluate(mnist_test_x, mnist_test_y)
 
 ```
 
@@ -225,7 +228,7 @@ Plot the loss and accuracy results. Use the `plot()` function to see the loss an
 
 ### Task 8: Use the `predict()` function to make predictions for the class of the data in the test set
 ```{r}
-predictions <- model %>% predict()
+predictions <- model %>% predict(mnist_test_x)
 
 predictions
 ```
@@ -240,6 +243,11 @@ evaluation <- model %>% evaluate()
 ```
 
 What is the accuracy you get?
+$accuracy
+[1] 0.9821
+
+$loss
+[1] 0.1857786
 
 ## Model optimisation
 
@@ -258,20 +266,30 @@ Dropout is the process of randomly dropping out a number of output features in a
 ```{r}
 # Recreate the model architecture but with dropout added
 model <- keras_model_sequential() %>%
-  
+  layer_dense(units = 256, activation = "relu", input_shape = c(784)) %>%
+  layer_dropout(rate = 0.25) %>% 
+  layer_dense(units = 128, activation = 'relu') %>%
+  layer_dropout(rate = 0.25) %>% 
+  layer_dense(units = 64, activation = 'relu') %>%
+  layer_dropout(rate = 0.25) %>% 
+  layer_dense(units = 10, activation = 'softmax')
 
 ```
 
 Now print the new model architecture
 
 ```{r}
-
+summary(model)
 ```
 
 Finally compile the new model
 
 ```{r}
-
+model %>% compile(
+  loss = "categorical_crossentropy",
+  optimizer = optimizer_rmsprop(),
+  metrics = c("accuracy") 
+)
 ```
 
 ## Build Confusion Matrix
@@ -297,13 +315,59 @@ Now we can create the confusion matrix.
 ### Task 11: Use the `eval_df` dataframe to extract the actual and predicted classes. Then create a table using the function `table()` with the ACTUAL vs PREDICTED values. 
 ```{r}
 # 1. Use the lapply() function to unlist the eval_df object
-eval_df <- lapply()
+
+eval_df <- as.data.frame(lapply(eval_df, unlist))
 
 # 2. Ensure the eval_df is a dataframe
+eval_df <- as.data.frame(eval_df)
 
 # 3. Use the table() function to create the confusion matrix
-table()
+confusion_matrix <- table(Actual = eval_df$y, Predicted = eval_df$y_pred)
+
+print(confusion_matrix)
 ```
 
 ### Task 12: (Optional) 
 If you have time, try the same task as before, but this time change the DNN architecture. You can try 4 hidden layers starting from 512 nodes. You can also play with the parameters of the network, such as different activation functions, different optimizer (optimizer_adam()) and dropout rate. Are you able to get 100% accuracy?
+
+```{r}
+# Recreate the model architecture but with dropout added
+model <- keras_model_sequential() %>%
+  layer_dense(units = 512, activation = "relu") %>%
+  layer_dropout(rate = 0.25) %>% 
+  layer_dense(units = 256, activation = "relu") %>%
+  layer_dropout(rate = 0.25) %>% 
+  layer_dense(units = 128, activation = 'relu') %>%
+  layer_dropout(rate = 0.25) %>% 
+  layer_dense(units = 64, activation = 'relu') %>%
+  layer_dropout(rate = 0.25) %>% 
+  layer_dense(units = 10, activation = 'softmax')
+```
+
+```{r}
+summary(model)
+```
+
+```{r}
+model %>% compile(
+  loss = "categorical_crossentropy",
+  optimizer = optimizer_rmsprop(),
+  metrics = c("accuracy") 
+)
+```
+
+```{r}
+# Train the model
+fit2 <- model %>%
+  fit(
+    x = mnist_x,
+    y = mnist_y,
+    epochs = 50,     # Select a value between 20-50
+    batch_size = 128,
+    validation_split = 0.5,    # Select a value between 0.2 to 0.5
+    verbose = TRUE
+  )
+```
+
+
+

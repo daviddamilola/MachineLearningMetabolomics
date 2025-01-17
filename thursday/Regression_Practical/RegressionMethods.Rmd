@@ -1,0 +1,276 @@
+---
+title: "Practical-  Regression Methods"
+author: "David Oluwasusi"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 3
+    toc_float: true
+editor_options: 
+  chunk_output_type: console
+---
+
+Load Data
+```{r}
+enose <- read.table('EnoseAllSamples.csv', sep=",", header = TRUE, row.names = 1)
+sensory <- read.table('MicroCounts.csv', sep=",", header = TRUE, row.names = 1)
+```
+
+```{r}
+merged <- merge(enose, sensory, by="row.names")
+
+rownames(merged) = merged[,1]
+
+#remove rownames columns
+AllData <- as.data.frame(merged[, -1])
+```
+
+```{r}
+hist(AllData$CFC,
+     main = "Histogram of CFC",
+     xlab = "CFC",
+     col = "lightblue", breaks = 20)
+
+```
+
+```{r}
+AllData$CFC <- log10(AllData$CFC)
+hist(AllData$CFC,
+     main = "Bacteria count distribution",
+     xlab = "CFC",
+     col = "lightblue", breaks = 20)
+```
+```{r}
+library(ggplot2)
+ggplot(AllData, aes(x = DF1, y = CFC)) +
+  geom_point(color = "blue", size = 2) +
+  geom_smooth(method = "lm", color = "red") +
+  ggtitle("Log10 CFU/g vs. Density") +
+  xlab("Density (DF1)") +
+  ylab("Log10 CFU/g (CFC)")
+```
+Split data into partitions
+
+```{r}
+library(caret)
+set.seed(8)
+
+trainIndex <- createDataPartition(AllData$CFC, p = .7, list = FALSE, times = 1)
+
+trainSet <- AllData[trainIndex, ]; testSet <- AllData[-trainIndex, ]
+
+trainCl <- trainSet[, ncol(trainSet)]
+testCl <- testSet[, ncol(testSet)]
+```
+
+Multiple Linear Regression
+```{r}
+model.fit <- lm(CFC ~ ., data = trainSet)
+
+summary(model.fit)
+```
+Assess Variable Importance
+
+```{r}
+library(caret)
+AllData.variableImportance = varImp(model.fit, scale = TRUE)
+print(AllData.variableImportance)
+```
+visualize variable importance
+
+```{r}
+barplot(AllData.variableImportance$Overall,
+        names.arg = rownames(AllData.variableImportance),
+        col = "blue",
+        las = 2,  # Rotate axis labels for better readability
+        main = "Variable Importance",
+        xlab = "Variables",
+        ylab = "Importance Score")
+```
+Assessing Fit Quality.
+
+```{r}
+predictions <- predict(model.fit, newdata = trainSet)
+
+# Generate predictions for the testing set
+test_predictions <- predict(model.fit, newdata = testSet)
+```
+
+visualize predicted vs actual values
+
+```{r}
+# Scatter plot for training set
+plot(predictions, trainSet$CFC,
+     xlab = "Predicted Values (CFC)",
+     ylab = "Actual Values (log10 CFU/g)",
+     main = "Predicted vs Actual Values (Training Set)",
+     col = "blue", pch = 16)
+
+# Add a diagonal line for reference (perfect prediction line)
+abline(a = 0, b = 1, col = "red", lwd = 2)
+
+# Add a diagonal line for reference (perfect prediction line)
+abline(a = 0, b = 1, col = "red", lwd = 2)
+```
+
+For test set
+```{r}
+# Scatter plot for test set
+plot(test_predictions, testSet$CFC,
+     xlab = "Predicted Values (CFC)",
+     ylab = "Actual Values (log10 CFU/g)",
+     main = "Predicted vs Actual Values (Test Set)",
+     col = "green", pch = 16)
+
+# Add a diagonal line for reference (perfect prediction line)
+abline(a = 0, b = 1, col = "red", lwd = 2)
+```
+
+use RMSE to assess fit quality
+
+```{r}
+library(caret)
+
+# Calculate RMSE for the training set
+train_rmse <- RMSE(pred = predictions, obs = trainSet$CFC)
+cat("Training RMSE:", train_rmse, "\n")
+
+# Calculate RMSE for the test set
+test_rmse <- RMSE(pred = test_predictions, obs = testSet$CFC)
+cat("Test RMSE:", test_rmse, "\n")
+```
+```{r}
+model.fit1 <- lm(CFC ~ DF1 + DF4 + DF5, data = trainSet)
+predictions <- predict(model.fit1, newdata = trainSet)
+
+# Generate predictions for the testing set
+test_predictions <- predict(model.fit1, newdata = testSet)
+```
+
+```{r}
+# Scatter plot for training set
+plot(predictions, trainSet$CFC,
+     xlab = "Predicted Values (CFC)",
+     ylab = "Actual Values (log10 CFU/g)",
+     main = "Predicted vs Actual Values (Training Set)",
+     col = "blue", pch = 16)
+
+# Add a diagonal line for reference (perfect prediction line)
+abline(a = 0, b = 1, col = "red", lwd = 2)
+
+# Add a diagonal line for reference (perfect prediction line)
+abline(a = 0, b = 1, col = "red", lwd = 2)
+```
+
+Model Tuning
+
+```{r}
+model.fit <- train(CFC ~ ., method='lmStepAIC', data=trainSet)
+```
+
+
+```{r}
+
+```
+
+Assess quality
+```{r}
+evaluate_model <- function(trainSet, testSet, formula, method, tuneGrid = NULL) {
+  # Train the model
+  model.fit <- train(formula, data = trainSet, method = method, tuneGrid = tuneGrid)
+  
+  # Generate predictions for training and testing sets
+  train_predictions <- predict(model.fit, newdata = trainSet)
+  test_predictions <- predict(model.fit, newdata = testSet)
+  
+  # Calculate RMSE for training and testing sets
+  train_rmse <- RMSE(pred = train_predictions, obs = trainSet$CFC)
+  test_rmse <- RMSE(pred = test_predictions, obs = testSet$CFC)
+  
+  # Print RMSE results
+  cat("Model:", method, "\n")
+  cat("Training RMSE:", train_rmse, "\n")
+  cat("Test RMSE:", test_rmse, "\n")
+  
+  plot(testSet$CFC, test_predictions,
+     xlab = "Actual Values (CFC)",
+     ylab = "Predicted Values (CFC)",
+     main = "Predicted vs Actual Values (Test Set)",
+     col = "blue", pch = 16)
+
+# Add a diagonal line for reference
+abline(a = 0, b = 1, col = "red", lwd = 2)
+  
+  # Return the model and RMSEs
+  return(list(model = model.fit, train_rmse = train_rmse, test_rmse = test_rmse))
+}
+
+
+```
+For Knn model
+```{r}
+knn_grid <- expand.grid(k = 1:20)
+
+# Evaluate the KNN model
+knn_results <- evaluate_model(
+  trainSet = trainSet,
+  testSet = testSet,
+  formula = CFC ~ ., 
+  method = "knn",
+  tuneGrid = knn_grid
+)
+```
+for Lasso regression
+```{r}
+lasso_grid <- expand.grid(alpha = 1, lambda = seq(0.01, 1, by = 0.01))
+
+lasson_results <- evaluate_model(
+  trainSet = trainSet,
+  testSet = testSet,
+  formula = CFC ~ ., 
+  method = "glmnet",
+  tuneGrid = lasso_grid
+)
+
+```
+
+```{r}
+enose <- read.table('EnoseAllSamples.csv', sep=",", header = TRUE, row.names = 1)
+mcCounts <- read.table('MicroCounts.csv', sep=",", header = TRUE, row.names = 1)
+sensory <- read.table('SensoryAllSamples.csv', sep=",", header = TRUE, row.names = 1)
+
+mergedAll <- merge(enose, sensory, by="row.names")
+rownames(mergedAll) = mergedAll[,1]
+
+#remove rownames columns
+mergedAll <- as.data.frame(merged[, -1])
+mergedAll <- merge(mergedAll, sensory, by="row.names")
+rownames(mergedAll) = mergedAll[,1] #set row names as the rowname column
+
+```
+
+```{r}
+mergedAll <- mergedAll %>% select(-Row.names)
+
+```
+
+```{r}
+class_groups <- split(mergedAll, mergedAll$sensory)
+library(ggplot2)
+
+# Create frequency plots for each class
+for (class in unique(mergedAll$sensory)) {
+  # Filter data for the current class
+  class_data <- mergedAll[mergedAll$sensory == class, ]
+  
+  print(ggplot(mergedAll, aes(x = CFC)) +
+  geom_histogram(binwidth = 500000, fill = "blue", alpha = 0.7) +
+  facet_wrap(~ sensory, scales = "free_y") +
+  ggtitle("Frequency Distribution by Class") +
+  xlab("CFC") +
+  ylab("Frequency") +
+  theme_minimal())
+}
+```
+

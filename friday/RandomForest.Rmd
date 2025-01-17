@@ -1,0 +1,297 @@
+---
+title: "Practical- Ensemble methods Random Forest"
+author: "David Oluwasusi"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 3
+    toc_float: true
+editor_options: 
+  chunk_output_type: console
+---
+
+Library Loading
+```{r}
+library(mlr3verse)        
+library(ranger)  
+library(tidyverse)
+library(mlbench)
+library(mlr3viz)
+library(mlr3learners)
+library(paradox)
+library(bbotk)
+```
+Data Loading & Exploration
+```{r}
+data(Zoo)
+```
+
+make zoo data as factors
+
+```{r}
+zooD <- mutate_all(Zoo, as.factor)
+head(zooD)
+```
+
+check the proportion of each class in the data set
+```{r}
+round(prop.table(table(zooD$type)) * 100, digits = 1)
+```
+remove samples where number of legs are 5 or 8 as their samples are underrepresented
+```{r}
+a <- which(zooD$legs=="8")
+b <- which(zooD$legs=="5")
+zoo1 <- zooD[-c(a,b),]
+```
+
+Model Building
+```{r}
+task_zoo = as_task_classif(type ~ ., data = zoo1)
+```
+
+```{r}
+
+task_zoo$data()
+```
+```{r}
+autoplot(task_zoo)
+```
+use Ranger algorithm, which usee random forest algorithm
+```{r}
+learner = lrn("classif.ranger")
+```
+
+Model Training
+
+first partition the training and testing set
+```{r}
+set.seed(4)
+split = partition(task_zoo, ratio = 0.67)
+```
+
+proceed with training, remember the learner is set to the random forest algo via ranger
+```{r}
+learner$train(task_zoo, split$train)
+```
+check the trained model
+```{r}
+learner$model
+```
+Model testing
+
+validate the model with the independent test set and then check the classification accuracy 
+```{r}
+prediction = learner$predict(task_zoo, split$test)
+#classification accuracy
+measure = msr("classif.acc")
+prediction$score(measure)
+```
+
+nice accuracy, its > than 0.9375
+
+To check the performance we check the confusion matrix
+
+```{r}
+prediction$confusion
+```
+
+```{r}
+autoplot(prediction)
+```
+
+Model Tunning
+
+```{r}
+learner$param_set$ids()
+```
+
+adjust relevant hyper parameters
+```{r}
+learner1 = lrn("classif.ranger",
+num.trees = to_tune(200, 500),
+mtry = to_tune(2, 12),
+min.node.size = 2,
+max.depth = 20)
+```
+
+```{r}
+resampling = rsmp("cv", folds = 3)
+```
+
+
+```{r}
+measure = msr("classif.acc")
+```
+
+```{r}
+terminator = trm("evals", n_evals = 20)
+```
+
+```{r}
+train_Set<-zoo1[split$train,]
+task_train<-as_task_classif(type ~ ., data = train_Set)
+```
+
+```{r}
+instance = ti(task = task_train,
+learner = learner1,
+resampling = resampling,
+measures = measure,
+terminator = terminator
+)
+instance
+```
+
+```{r}
+tuner = tnr("grid_search", resolution = 5, batch_size = 4)
+```
+
+```{r}
+tuner$optimize(instance)
+```
+
+Build final model
+
+```{r}
+learner1$param_set$values = instance$result_learner_param_vals
+learner1$train(task_train)
+learner1$model
+```
+```{r}
+prediction = learner1$predict(task_zoo, split$test)
+#classification accuracy
+measure = msr("classif.acc")
+prediction$score(measure)
+```
+
+
+visualize the output
+```{r}
+prediction$confusion
+autoplot(prediction)
+```
+PimaIndiansDiabetes2
+
+Data Loading & Exploration
+```{r}
+data(PimaIndiansDiabetes2)
+```
+
+Make data as factors
+
+```{r}
+PimaIndiansDiabetes2D <- mutate_all(PimaIndiansDiabetes2, as.factor)
+head(PimaIndiansDiabetes2D)
+```
+```{r}
+round(prop.table(table(PimaIndiansDiabetes2D$diabetes)) * 100, digits = 1)
+```
+
+
+handle missing data
+```{r}
+PimaIndiansDiabetes2_clean <- na.omit(PimaIndiansDiabetes2)
+```
+
+Model building
+```{r}
+task_diab = as_task_classif(diabetes ~ ., data = PimaIndiansDiabetes2_clean)
+```
+
+```{r}
+task_diab$data()
+```
+
+```{r}
+autoplot(task_diab)
+```
+
+specify learner
+```{r}
+learner = lrn("classif.ranger")
+```
+
+Model training
+
+partition first
+```{r}
+set.seed(4)
+split = partition(task_diab, ratio = 0.67)
+```
+
+train
+```{r}
+learner$train(task_diab, split$train)
+```
+
+```{r}
+learner$model
+```
+
+```{r}
+prediction = learner$predict(task_diab, split$test)
+#classification accuracy
+measure = msr("classif.acc")
+prediction$score(measure)
+```
+
+```{r}
+prediction$confusion
+
+```
+
+```{r}
+autoplot(prediction)
+```
+
+75% accuracy, what a model, lets see if we can tune it better
+
+```{r}
+learner1 = lrn("classif.ranger",
+num.trees = to_tune(200, 500),
+mtry = to_tune(2, 12),
+min.node.size = 2,
+max.depth = 20)
+
+measure = msr("classif.acc")
+
+terminator = trm("evals", n_evals = 20)
+
+train_Set<-PimaIndiansDiabetes2_clean[split$train,]
+task_train<-as_task_classif(diabetes ~ ., data = train_Set)
+
+instance = ti(task = task_train,
+learner = learner1,
+resampling = resampling,
+measures = measure,
+terminator = terminator
+)
+instance
+```
+
+
+```{r}
+tuner = tnr("grid_search", resolution = 5, batch_size = 2)
+tuner$optimize(instance)
+```
+
+```{r}
+learner1$param_set$values = instance$result_learner_param_vals
+learner1$train(task_train)
+learner1$model
+```
+
+
+```{r}
+prediction = learner1$predict(task_diab, split$test)
+#classification accuracy
+measure = msr("classif.acc")
+prediction$score(measure)
+```
+
+```{r}
+prediction$confusion
+autoplot(prediction)
+```
+
